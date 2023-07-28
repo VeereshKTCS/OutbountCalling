@@ -47,20 +47,21 @@ app.MapPost("/api/callbacks", async (CloudEvent[] events, CallAutomationClient c
         if (@event is CallConnected callConnected)
         {
             logger.LogInformation($"Call connected: {callConnected.CallConnectionId} | {callConnected.CorrelationId}");
-            FileSource playSource = new FileSource(new Uri(uriString: builder.Configuration["ACS:AudioFile"]));
-
+            logger.LogInformation($"Participant added");
+            string audioFile = "https://audiofilesane.blob.core.windows.net/audiofiles/VMTestAudio.wav";
+            FileSource playSource = new FileSource(new Uri(uriString: audioFile));
             CallAutomationClient callAutomationClient = new CallAutomationClient(builder.Configuration["ACS:ConnectionString"]);
+            Thread.Sleep(25000);
             var callMedia = callAutomationClient.GetCallConnection(callConnected.CallConnectionId).GetCallMedia();
-
-            
             var playResponse = await callMedia.PlayToAllAsync(playSource);
-
-            //await client.GetCallConnection(callConnected.CallConnectionId).GetCallMedia().PlayToAllAsync(playSource, playOptions);
         }
+
 
         if (@event is PlayCompleted playCompleted)
         {
             logger.LogInformation($"Play completed! The OperationContext is {playCompleted.OperationContext}.");
+            CallAutomationClient callAutomationClient = new CallAutomationClient(builder.Configuration["ACS:ConnectionString"]);
+            await callAutomationClient.GetCallConnection(playCompleted.CallConnectionId).HangUpAsync(true);
         }
 
         if (@event is PlayFailed playFailed)
@@ -71,4 +72,80 @@ app.MapPost("/api/callbacks", async (CloudEvent[] events, CallAutomationClient c
 });
 
 
+app.MapPost("/api/talktoagent", async (CallRequest request, CallAutomationClient client) =>
+{
+    var applicationId = new PhoneNumberIdentifier(request.Source);
+    var callThisPerson = new CallInvite(new PhoneNumberIdentifier(request.Destination), applicationId);
+    var createCallOptions = new CreateCallOptions(callThisPerson,
+        new Uri(builder.Configuration["VS_TUNNEL_URL"] + "api/talktoagentcallback"));
+    await client.CreateCallAsync(createCallOptions);
+});
+
+app.MapPost("/api/talktoagentcallback", async (CloudEvent[] events, CallAutomationClient client, ILogger<Program> logger) =>
+{
+
+    foreach (var cloudEvent in events)
+    {
+        var @event = CallAutomationEventParser.Parse(cloudEvent);
+        logger.LogInformation($"Received {@event.GetType()}");
+        if (@event is CallConnected callConnected)
+        {
+            logger.LogInformation($"Call connected: {callConnected.CallConnectionId} | {callConnected.CorrelationId}");
+            logger.LogInformation($"Participant added");
+            string audioFile = "https://audiofilesane.blob.core.windows.net/audiofiles/talktoagent.wav";
+            FileSource playSource = new FileSource(new Uri(uriString: audioFile));
+            CallAutomationClient callAutomationClient = new CallAutomationClient(builder.Configuration["ACS:ConnectionString"]);
+            Thread.Sleep(25000);
+            var callMedia = callAutomationClient.GetCallConnection(callConnected.CallConnectionId).GetCallMedia();
+            var playResponse = await callMedia.PlayToAllAsync(playSource);
+        }
+
+
+        if (@event is PlayCompleted playCompleted)
+        {
+            logger.LogInformation($"Play completed! The OperationContext is {playCompleted.OperationContext}.");
+            CallAutomationClient callAutomationClient = new CallAutomationClient(builder.Configuration["ACS:ConnectionString"]);
+            await callAutomationClient.GetCallConnection(playCompleted.CallConnectionId).HangUpAsync(true);
+        }
+        if (@event is PlayFailed playFailed)
+        {
+            logger.LogError($"Play failed: {playFailed.ResultInformation.Message}");
+        }
+    }
+});
+
+app.MapPost("/api/emptycall", async (CallRequest request, CallAutomationClient client) =>
+{
+    var applicationId = new PhoneNumberIdentifier(request.Source);
+    var callThisPerson = new CallInvite(new PhoneNumberIdentifier(request.Destination), applicationId);
+    var createCallOptions = new CreateCallOptions(callThisPerson,
+        new Uri(builder.Configuration["VS_TUNNEL_URL"] + "api/emptycallback"));
+    await client.CreateCallAsync(createCallOptions);
+});
+
+app.MapPost("/api/emptycallback", async (CloudEvent[] events, CallAutomationClient client, ILogger<Program> logger) =>
+{
+
+    foreach (var cloudEvent in events)
+    {
+        var @event = CallAutomationEventParser.Parse(cloudEvent);
+        logger.LogInformation($"Received {@event.GetType()}");
+        if (@event is CallConnected callConnected)
+        {
+            logger.LogInformation($"Call connected: {callConnected.CallConnectionId} | {callConnected.CorrelationId}");
+            logger.LogInformation($"Participant added");
+            CallAutomationClient callAutomationClient = new CallAutomationClient(builder.Configuration["ACS:ConnectionString"]);
+            Thread.Sleep(25000);
+        }
+        if (@event is PlayCompleted playCompleted)
+        {
+            CallAutomationClient callAutomationClient = new CallAutomationClient(builder.Configuration["ACS:ConnectionString"]);
+            await callAutomationClient.GetCallConnection(playCompleted.CallConnectionId).HangUpAsync(true);
+        }
+        if (@event is PlayFailed playFailed)
+        {
+            logger.LogError($"Play failed: {playFailed.ResultInformation.Message}");
+        }
+    }
+});
 app.Run();
